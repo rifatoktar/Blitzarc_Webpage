@@ -1,4 +1,4 @@
-name: Flutter Web Deploy
+name: Flutter Web Build
 
 on:
   push:
@@ -7,53 +7,72 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout Repository
+        uses: actions/checkout@v3
       
-      # Bu adımı ekleyin - çalışma dizinini görüntüler
-      - name: Debug working directory
+      - name: List Repository Contents
         run: |
-          pwd
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
           ls -la
-          
-      # Proje dizini farklı bir klasördeyse buraya çalışma dizinini ayarlayın
-      # Örneğin, eğer Flutter projeniz "flutter_project" klasöründeyse:
-      - name: Change to project directory
-        run: |
-          if [ -d "flutter_project" ]; then
-            cd flutter_project
-            echo "Flutter project found in flutter_project directory"
-            ls -la
-          fi
-          if [ -f "pubspec.yaml" ]; then
-            echo "pubspec.yaml found in current directory"
-          else
-            echo "ERROR: pubspec.yaml not found!"
-            find . -name "pubspec.yaml"
-          fi
+          echo "-----------------"
+          echo "Search for pubspec.yaml:"
+          find . -name "pubspec.yaml" -type f || echo "No pubspec.yaml found"
       
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@v3
         with:
           flutter-version: '3.32.0'
           channel: 'stable'
       
-      - name: Get dependencies
-        # Proje klasörünüz ana dizinden farklıysa, working-directory parametresini ekleyin
-        # working-directory: ./flutter_project
+      - name: Initialize Flutter Project
         run: |
-          if [ -f "pubspec.yaml" ]; then
+          PUBSPEC_PATH=$(find . -name "pubspec.yaml" -type f | head -n 1 || echo "")
+          
+          if [ -n "$PUBSPEC_PATH" ]; then
+            PROJECT_DIR=$(dirname "$PUBSPEC_PATH")
+            echo "Flutter project found at: $PROJECT_DIR"
+            cd "$PROJECT_DIR"
             flutter pub get
           else
-            echo "Looking for Flutter project..."
-            FLUTTER_PROJECT=$(find . -name "pubspec.yaml" -type f | head -n 1 | xargs dirname)
-            if [ -n "$FLUTTER_PROJECT" ]; then
-              echo "Flutter project found at: $FLUTTER_PROJECT"
-              cd "$FLUTTER_PROJECT"
-              flutter pub get
-            else
-              echo "No Flutter project found!"
-              exit 1
-            fi
+            echo "No pubspec.yaml found. Creating a new Flutter project..."
+            flutter create my_flutter_web
+            cd my_flutter_web
+            flutter pub get
+            
+            # Eğer önceden yazılmış bir kodunuz varsa, buraya aktarabilirsiniz
+            # örneğin, ../lib klasöründeki dosyaları kopyalayabilirsiniz
           fi
+      
+      - name: Build Web
+        run: |
+          PUBSPEC_PATH=$(find . -name "pubspec.yaml" -type f | head -n 1 || echo "")
+          
+          if [ -n "$PUBSPEC_PATH" ]; then
+            PROJECT_DIR=$(dirname "$PUBSPEC_PATH")
+            cd "$PROJECT_DIR"
+          else
+            cd my_flutter_web
+          fi
+          
+          flutter build web --release
+      
+      - name: Create .nojekyll File
+        run: |
+          PUBSPEC_PATH=$(find . -name "pubspec.yaml" -type f | head -n 1 || echo "")
+          
+          if [ -n "$PUBSPEC_PATH" ]; then
+            PROJECT_DIR=$(dirname "$PUBSPEC_PATH")
+            touch "$PROJECT_DIR/build/web/.nojekyll"
+          else
+            touch my_flutter_web/build/web/.nojekyll
+          fi
+      
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./my_flutter_web/build/web
+          force_orphan: true
