@@ -11,6 +11,28 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       
+      # Bu adımı ekleyin - çalışma dizinini görüntüler
+      - name: Debug working directory
+        run: |
+          pwd
+          ls -la
+          
+      # Proje dizini farklı bir klasördeyse buraya çalışma dizinini ayarlayın
+      # Örneğin, eğer Flutter projeniz "flutter_project" klasöründeyse:
+      - name: Change to project directory
+        run: |
+          if [ -d "flutter_project" ]; then
+            cd flutter_project
+            echo "Flutter project found in flutter_project directory"
+            ls -la
+          fi
+          if [ -f "pubspec.yaml" ]; then
+            echo "pubspec.yaml found in current directory"
+          else
+            echo "ERROR: pubspec.yaml not found!"
+            find . -name "pubspec.yaml"
+          fi
+      
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -18,16 +40,20 @@ jobs:
           channel: 'stable'
       
       - name: Get dependencies
-        run: flutter pub get
-        
-      - name: Build web
-        run: flutter build web --release
-      
-      - name: Create .nojekyll file
-        run: touch build/web/.nojekyll
-      
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./build/web
+        # Proje klasörünüz ana dizinden farklıysa, working-directory parametresini ekleyin
+        # working-directory: ./flutter_project
+        run: |
+          if [ -f "pubspec.yaml" ]; then
+            flutter pub get
+          else
+            echo "Looking for Flutter project..."
+            FLUTTER_PROJECT=$(find . -name "pubspec.yaml" -type f | head -n 1 | xargs dirname)
+            if [ -n "$FLUTTER_PROJECT" ]; then
+              echo "Flutter project found at: $FLUTTER_PROJECT"
+              cd "$FLUTTER_PROJECT"
+              flutter pub get
+            else
+              echo "No Flutter project found!"
+              exit 1
+            fi
+          fi
